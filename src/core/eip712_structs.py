@@ -400,7 +400,7 @@ class EIP712Struct(EIP712Type, metaclass=OrderedAttributesMeta):
 
     @staticmethod
     def _assert_domain(domain):
-        result = domain or eip712_structs.default_domain
+        result = domain or default_domain
         if not result:
             raise ValueError(
                 "Domain must be provided, or eip712_structs.default_domain must be set."

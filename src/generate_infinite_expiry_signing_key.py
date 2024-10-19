@@ -2,10 +2,9 @@ import secrets
 from typing import TypedDict
 
 import requests
+from eip712_structs import Address, EIP712Struct, Uint, make_domain
 from eth_account import Account
 from eth_hash.auto import keccak as keccak_256
-
-from eip712_structs import Address, EIP712Struct, Uint, make_domain
 
 
 class Register(EIP712Struct):

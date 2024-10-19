@@ -9,63 +9,11 @@ import websockets
 from eth_account import Account
 from eth_hash.auto import keccak
 from loguru import logger
-from web3 import Web3
 
-from eip712_structs import Address, Boolean, EIP712Struct, Uint, Bytes, make_domain
-
-CONFIG = {
-    "testnet": {
-        "rest_url": "https://api-testnet.aevo.xyz",
-        "ws_url": "wss://ws-testnet.aevo.xyz",
-        "signing_domain": {
-            "name": "Aevo Testnet",
-            "version": "1",
-            "chainId": "11155111",
-        },
-    },
-    "mainnet": {
-        "rest_url": "https://api.aevo.xyz",
-        "ws_url": "wss://ws.aevo.xyz",
-        "signing_domain": {
-            "name": "Aevo Mainnet",
-            "version": "1",
-            "chainId": "1",
-        },
-    },
-}
-
-ADDRESSES = {
-    "testnet": {
-        "l1_bridge": "0xb459023ECAf4ee7E55BEC136e592d2B7afF482E2",
-        "l1_usdc": "0xcC3e3DBb31a7410e1dc5156593CdBFA0616BB309",
-        "l2_withdraw_proxy": "0x870b65A0816B9e9A0dFCE08Fd18EFE20f245011f",
-        "l2_usdc": "0x52623B37Ff81c53567D6D16fd94638734cCDCf27",
-    },
-    "mainnet": {
-        "l1_bridge": "0x4082C9647c098a6493fb499EaE63b5ce3259c574",
-        "l1_usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "l2_withdraw_proxy": "0x4d44B9AbB13C80d2E376b7C5c982aa972239d845",
-        "l2_usdc": "0x643aaB1618c600229785A5E06E4b2d13946F7a1A",
-    },
-}
-
-
-class Order(EIP712Struct):
-    maker = Address()
-    isBuy = Boolean()
-    limitPrice = Uint(256)
-    amount = Uint(256)
-    salt = Uint(256)
-    instrument = Uint(256)
-    timestamp = Uint(256)
-
-
-class Withdraw(EIP712Struct):
-    collateral = Address()
-    to = Address()
-    amount = Uint(256)
-    salt = Uint(256)
-    data = Bytes(32)
+from constants import ADDRESSES, CONFIG
+from core.eip712_structs import make_domain
+from core.order import Order
+from core.withdraw import Withdraw
 
 
 class AevoClient:
@@ -188,11 +136,11 @@ class AevoClient:
     async def send(self, data):
         try:
             await self.connection.send(data)
-        except websockets.exceptions.ConnectionClosedError as e:
+        except websockets.exceptions.ConnectionClosedError:
             logger.debug("Restarted Aevo websocket connection")
             await self.reconnect()
             await self.connection.send(data)
-        except:
+        except Exception:
             await self.reconnect()
 
     # Public REST API
@@ -219,7 +167,7 @@ class AevoClient:
         )
         try:
             return req.json()
-        except:
+        except Exception:
             return req.text()
 
     def rest_create_market_order(self, instrument_id, is_buy, quantity):
@@ -287,10 +235,10 @@ class AevoClient:
         data=None,
         amount_decimals=10**6,
     ):
-        if collateral == None:
+        if collateral is None:
             collateral = ADDRESSES[self.env]["l2_usdc"]
 
-        if to == None:
+        if to is None:
             to = ADDRESSES[self.env]["l2_withdraw_proxy"]
 
         data, withdraw_id = self.create_withdraw(
@@ -303,7 +251,7 @@ class AevoClient:
         )
         try:
             return req.json()
-        except:
+        except Exception:
             return req.text()
 
     # Public WS Subscriptions
@@ -375,7 +323,7 @@ class AevoClient:
         await self.send(json.dumps(payload))
 
     # Private WS Commands
-    def create_order_ws_json(
+    def _create_order_ws_json(
         self,
         instrument_id,
         is_buy,
@@ -387,7 +335,7 @@ class AevoClient:
         amount_decimals=10**6,
     ):
         timestamp = int(time.time())
-        salt, signature, order_id = self.sign_order(
+        salt, signature, order_id = self._sign_order(
             instrument_id=instrument_id,
             is_buy=is_buy,
             limit_price=limit_price,
@@ -425,7 +373,7 @@ class AevoClient:
         stop=None,
     ):
         timestamp = int(time.time())
-        salt, signature, order_id = self.sign_order(
+        salt, signature, order_id = self._sign_order(
             instrument_id=instrument_id,
             is_buy=is_buy,
             limit_price=limit_price,
@@ -462,7 +410,7 @@ class AevoClient:
         id=None,
         mmp=True,
     ):
-        data, order_id = self.create_order_ws_json(
+        data, order_id = self._create_order_ws_json(
             instrument_id=int(instrument_id),
             is_buy=is_buy,
             limit_price=limit_price,
@@ -492,7 +440,7 @@ class AevoClient:
     ):
         timestamp = int(time.time())
         instrument_id = int(instrument_id)
-        salt, signature, new_order_id = self.sign_order(
+        salt, signature, new_order_id = self._sign_order(
             instrument_id=instrument_id,
             is_buy=is_buy,
             limit_price=limit_price,
@@ -536,7 +484,7 @@ class AevoClient:
         payload = {"op": "cancel_all_orders", "data": {}}
         await self.send(json.dumps(payload))
 
-    def sign_order(
+    def _sign_order(
         self,
         instrument_id,
         is_buy,
@@ -567,7 +515,7 @@ class AevoClient:
         )
 
     def create_withdraw(self, collateral, to, amount, data, amount_decimals):
-        if data == None:
+        if data is None:
             data = keccak(bytearray()).hex()
         salt, signature, withdraw_id = self.sign_withdraw(
             collateral=collateral,
@@ -584,7 +532,7 @@ class AevoClient:
             "salt": salt,
             "signature": signature,
         }
-        if data != None:
+        if data is not None:
             payload["data"] = data
 
         return payload, withdraw_id
@@ -607,27 +555,3 @@ class AevoClient:
             Account._sign_hash(signable_bytes, self.wallet_private_key).signature.hex(),
             f"0x{signable_bytes.hex()}",
         )
-
-
-async def main():
-    # The following values which are used for authentication on private endpoints, can be retrieved from the Aevo UI
-    aevo = AevoClient(
-        signing_key="",
-        wallet_address="",
-        api_key="",
-        api_secret="",
-        env="testnet",
-    )
-
-    markets = aevo.get_markets("ETH")
-    logger.info(markets)
-
-    await aevo.open_connection()
-    await aevo.subscribe_ticker("ticker:ETH:PERPETUAL")
-
-    async for msg in aevo.read_messages():
-        logger.info(msg)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

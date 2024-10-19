@@ -1,9 +1,10 @@
 # Example deposit using
-from web3 import Web3
-from web3.middleware import construct_sign_and_send_raw_middleware
-from loguru import logger
 import json
-from aevo import ADDRESSES, CONFIG
+
+from loguru import logger
+from web3 import Web3
+
+from aevo import ADDRESSES
 
 DEFAULT_GAS_LIMIT = 650000
 
